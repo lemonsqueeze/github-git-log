@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+# github-git-log: remote git log
+# get commit log for a github repository without having to clone it locally.
+# (uses github rest api, so only works for github)
+#
+# homepage: https://github.com/lemonsqueeze/github-git-log
+
+# access token:
+# if you have created a personal access token to increase
+# your hourly github api rate-limit, enter it here:
+username = ""                  # your github username
+token    = ""                  # 40 chars personal access token
+
+import requests
+import time
+import sys
+import re
+from requests.auth import HTTPBasicAuth
+
+def usage():
+    print("usage: github-git-log [options] https://github.com/user/repo")
+    print("")
+    print("options:")
+    print("   --full: full git-log style output")
+    print("           default: short one-line per commit output")
+    sys.exit(1)
+
+short = 1                       # one-line per commit log output
+branch = ""                     # default branch
+
+while len(sys.argv) >= 2 and sys.argv[1][0] == "-":
+    opt = sys.argv[1]
+    del(sys.argv[1])
+    if opt == "--full":
+        short = 0
+    else:
+        usage()
+
+if len(sys.argv) < 2:
+    usage()
+repo_url = sys.argv[1]
+
+(user, repo) = re.sub(".*github.com/([^/]+)/([^/]+)", r"\1:\2", repo_url).split(":")
+
+authentication = None
+if username and token:
+    #print("authenticating as %s" % username)
+    authentication = HTTPBasicAuth(username, token)
+
+page = 1
+while 1:
+    api_url = "https://api.github.com/repos/%s/%s/commits?page=%i" % (user, repo, page)
+    req = requests.get(api_url, auth=authentication)
+    
+    if req.status_code == 403:
+        print("error 403: github api rate-limit exceeded.")
+        print("by default github has a 60-requests-per-hour limit for unauthenticated requests.")
+        print("")
+        print("the limit is much higher if you use an access token to authenticate.")
+        print("you can create a personal access token in your github account's settings:")
+        print("  https://github.com/settings/tokens     (Personal access tokens -> Generate new token)")
+        print("don't give it any scope (default) so the app cannot do anything to your account or")
+        print("repositories. once the token is generated just edit this script and enter the token at")
+        print("the top to make it run in authenticated mode.")
+        sys.exit(1)
+
+    if req.status_code != 200:
+        print("error %s: %s" % (req.status_code, req.reason))
+        sys.exit(1)
+
+    # show api request quota left for this hour:
+    #print("api ratelimit remaining: %s" % req.headers['X-RateLimit-Remaining'])
+    
+    items = req.json()
+    if len(items) == 0:
+        sys.exit(0)
+
+    for item in items:
+        name      = item['commit']['author']['name']
+        email     = item['commit']['author']['email']
+        date_full = item['commit']['author']['date']
+        sha       = item['sha']
+        msg_full  = item['commit']['message']
+
+        if short:                                       # short one line per commit output
+            date  = re.sub("T.*", "", date_full)
+            h     = sha[0:9]
+            msg   = re.sub("\n.*", "", msg_full)
+            print("%20s %s %s %s" % (name, h, date, msg))
+        else:                                           # full git-log style output            
+            date  = re.sub("[TZ]", " ", date_full)
+            print("commit %s" % sha)
+            print("Author: %s <%s>" % (name, email))
+            print("Date:   %s" % date)
+            print("")
+            for line in msg_full.split("\n"):
+                print("    " + line)
+            print("")
+            
+    sys.stdout.flush()
+    page += 1
+
+
+# github api reference:
+#  https://docs.github.com/en/rest/reference/repos
+#  https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting
+#  https://docs.github.com/en/developers/apps/building-oauth-apps/authorizing-oauth-apps#non-web-application-flow
+#
+# personal access tokens:
+#  https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token
