@@ -105,14 +105,15 @@ while 1:
         msg_full  = item['commit']['message']
 
         if short:                                       # short one line per commit output
+            name  = re.sub("\(.*\)", "", name)            # remove stuff in (), typ. company name
             date  = re.sub("T.*", "", date_full)
             h     = sha[0:9]
             msg   = re.sub("\n.*", "", msg_full)
             if display_tags:
                 tag = get_tag(sha)
-                print("%20s %s %s %-18s %s" % (name, h, date, tag, msg))
+                print("%25s %s %s %-18s %s" % (name, h, date, tag, msg))
             else:
-                print("%20s %s %s %s" % (name, h, date, msg))
+                print("%25s %s %s %s" % (name, h, date, msg))
         else:                                           # full git-log style output
             date  = re.sub("[TZ]", " ", date_full)
             print("commit %s" % sha)
