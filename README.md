@@ -1,7 +1,7 @@
 
 ## github-git-log
 
-Usage:  `github-git-log [--full] https://github.com/user/repo | less -S`
+Usage:  `github-git-log [options] https://github.com/user/repo | less -S`
 
 Remote git log for github
 

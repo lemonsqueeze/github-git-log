@@ -15,24 +15,28 @@ import requests
 import time
 import sys
 import re
+import subprocess as sp
 from requests.auth import HTTPBasicAuth
 
 def usage():
     print("usage: github-git-log [options] https://github.com/user/repo")
     print("")
     print("options:")
-    print("   --full: full git-log style output")
-    print("           default: short one-line per commit output")
+    print("   --full       full git-log style output")
+    print("                default: short one-line per commit output")
+    print("   --tags, -t   display tags in one-line per commit mode")
     sys.exit(1)
 
 short = 1                       # one-line per commit log output
-branch = ""                     # default branch
+display_tags = 0                # show tags ?
 
 while len(sys.argv) >= 2 and sys.argv[1][0] == "-":
     opt = sys.argv[1]
     del(sys.argv[1])
-    if opt == "--full":
+    if   opt == "--full":
         short = 0
+    elif opt == "--tags" or opt == "-t":
+        display_tags = 1
     else:
         usage()
 
@@ -47,6 +51,24 @@ if username and token:
     #print("authenticating as %s" % username)
     authentication = HTTPBasicAuth(username, token)
 
+# get remote tags with git if showing tags
+sha2tag = {}
+if display_tags:
+    with sp.Popen("git ls-remote -t https://github.com/%s/%s" % (user, repo),
+                  shell = True,
+                  stdout = sp.PIPE,
+                  universal_newlines = True) as p:
+        for line in p.stdout.readlines():
+            line = line.strip()
+            (sha, tag) = re.split("\t", line)
+            tag = re.sub("refs/tags/", "", tag)
+            sha2tag[sha] = tag
+
+def get_tag(sha):
+    if sha in sha2tag:
+        return sha2tag[sha]
+    return ""
+            
 page = 1
 while 1:
     api_url = "https://api.github.com/repos/%s/%s/commits?page=%i" % (user, repo, page)
@@ -86,8 +108,12 @@ while 1:
             date  = re.sub("T.*", "", date_full)
             h     = sha[0:9]
             msg   = re.sub("\n.*", "", msg_full)
-            print("%20s %s %s %s" % (name, h, date, msg))
-        else:                                           # full git-log style output            
+            if display_tags:
+                tag = get_tag(sha)
+                print("%20s %s %s %-18s %s" % (name, h, date, tag, msg))
+            else:
+                print("%20s %s %s %s" % (name, h, date, msg))
+        else:                                           # full git-log style output
             date  = re.sub("[TZ]", " ", date_full)
             print("commit %s" % sha)
             print("Author: %s <%s>" % (name, email))
